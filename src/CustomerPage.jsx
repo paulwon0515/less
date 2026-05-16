@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UploadCloud, Box, Activity, Image as ImageIcon, CheckCircle2, ChevronRight, Zap } from 'lucide-react';
 import { DEFAULT_SIGN_TYPES, DEFAULT_SETTINGS } from './signTypes';
 import { useImageAnalysis, calculateEstimate } from './useImageAnalysis';
@@ -6,6 +6,9 @@ import { useImageAnalysis, calculateEstimate } from './useImageAnalysis';
 export default function CustomerPage() {
   const [dimensions, setDimensions] = useState({ width: '', depth: '' });
   const [signType, setSignType] = useState('A1');
+  const [settings, setSettings] = useState(DEFAULT_SETTINGS);
+  const [signTypes, setSignTypes] = useState(DEFAULT_SIGN_TYPES);
+  const [isLoading, setIsLoading] = useState(true);
 
   const {
     imagePreview,
@@ -19,22 +22,25 @@ export default function CustomerPage() {
     handleDrop,
   } = useImageAnalysis();
 
-  const loadSettings = () => {
-    try {
-      const saved = localStorage.getItem('lpss_settings');
-      return saved ? JSON.parse(saved) : DEFAULT_SETTINGS;
-    } catch { return DEFAULT_SETTINGS; }
-  };
-
-  const loadSignTypes = () => {
-    try {
-      const saved = localStorage.getItem('lpss_signTypes');
-      return saved ? JSON.parse(saved) : DEFAULT_SIGN_TYPES;
-    } catch { return DEFAULT_SIGN_TYPES; }
-  };
-
-  const settings = loadSettings();
-  const signTypes = loadSignTypes();
+  // Fetch settings from server on mount
+  useEffect(() => {
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.settings) setSettings({ ...DEFAULT_SETTINGS, ...data.settings });
+        if (data.signTypes) setSignTypes({ ...DEFAULT_SIGN_TYPES, ...data.signTypes });
+      })
+      .catch(() => {
+        // Fallback to localStorage if server fails
+        try {
+          const savedSettings = localStorage.getItem('lpss_settings');
+          if (savedSettings) setSettings({ ...DEFAULT_SETTINGS, ...JSON.parse(savedSettings) });
+          const savedTypes = localStorage.getItem('lpss_signTypes');
+          if (savedTypes) setSignTypes({ ...DEFAULT_SIGN_TYPES, ...JSON.parse(savedTypes) });
+        } catch {}
+      })
+      .finally(() => setIsLoading(false));
+  }, []);
 
   const { H_mm, finalPrice } = calculateEstimate({
     analysisResult, dimensions, signType, signTypes, settings,

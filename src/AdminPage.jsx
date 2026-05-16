@@ -8,6 +8,8 @@ export default function AdminPage() {
   const [signType, setSignType] = useState('A1');
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [saveFlash, setSaveFlash] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [syncStatus, setSyncStatus] = useState(''); // 'loading' | 'synced' | 'error' | ''
 
   // Load persisted settings or defaults
   const loadSettings = () => {
@@ -27,6 +29,27 @@ export default function AdminPage() {
   const [settings, setSettings] = useState(loadSettings);
   const [signTypes, setSignTypes] = useState(loadSignTypes);
 
+  // On mount, fetch server settings to sync
+  useEffect(() => {
+    setSyncStatus('loading');
+    fetch('/api/settings')
+      .then((r) => r.json())
+      .then((data) => {
+        if (data.settings) {
+          const merged = { ...DEFAULT_SETTINGS, ...data.settings };
+          setSettings(merged);
+          localStorage.setItem('lpss_settings', JSON.stringify(merged));
+        }
+        if (data.signTypes) {
+          const merged = { ...DEFAULT_SIGN_TYPES, ...data.signTypes };
+          setSignTypes(merged);
+          localStorage.setItem('lpss_signTypes', JSON.stringify(merged));
+        }
+        setSyncStatus('synced');
+      })
+      .catch(() => setSyncStatus('error'));
+  }, []);
+
   const updateSetting = (key, value) => {
     setSettings((prev) => ({ ...prev, [key]: value }));
   };
@@ -38,11 +61,27 @@ export default function AdminPage() {
     }));
   };
 
-  const saveAll = () => {
+  const saveAll = async () => {
+    setIsSaving(true);
+    // Save to localStorage
     localStorage.setItem('lpss_settings', JSON.stringify(settings));
     localStorage.setItem('lpss_signTypes', JSON.stringify(signTypes));
-    setSaveFlash(true);
-    setTimeout(() => setSaveFlash(false), 1500);
+
+    // Save to server
+    try {
+      await fetch('/api/settings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ settings, signTypes }),
+      });
+      setSaveFlash(true);
+      setTimeout(() => setSaveFlash(false), 1500);
+    } catch (err) {
+      console.error('Server save failed:', err);
+      setSaveFlash(true);
+      setTimeout(() => setSaveFlash(false), 1500);
+    }
+    setIsSaving(false);
   };
 
   const {
